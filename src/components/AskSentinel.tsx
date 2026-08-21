@@ -3,6 +3,7 @@ import { useApp } from '@/store/AppContext';
 import { cn } from '@/lib/cn';
 import { analyzeRisk } from '@/lib/riskEngine';
 import { askSentinel, getSuggestedQuestions } from '@/lib/aiService';
+import { askSentinelApi, isApiConfigured } from '@/services/api';
 import type { AIResponse } from '@/types';
 import { X, Bot, Send, Sparkles, AlertTriangle } from 'lucide-react';
 

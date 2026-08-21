@@ -16,7 +16,7 @@ import type { DashboardStats } from '@/types';
 import { formatTime } from '@/lib/utils';
 
 export function Dashboard() {
-  const { stats, transactions, setCurrentPage, runSim, addToast, setAttackReplayOpen, setSelectedTransaction } = useApp();
+  const { stats, transactions, setCurrentPage, runSim, addToast, setAttackReplayOpen, setSelectedTransaction, simLoading, simError, retryLastSim, settings } = useApp();
 
   const recentHighRisk = transactions
     .filter((t) => t.risk_level === 'HIGH' || t.risk_level === 'CRITICAL')
@@ -110,46 +110,69 @@ export function Dashboard() {
               label="Simulate Account Takeover"
               icon={Bot}
               color="critical"
-              onClick={() => {
-                const result = runSim('account-takeover');
-                setSelectedTransaction(result.transaction);
-                addToast({ type: 'warning', title: 'Simulation Complete', message: `${result.transaction.threat_type} — Score: ${result.analysis.risk_score}/100` });
-                setAttackReplayOpen(true);
+              loading={simLoading}
+              onClick={async () => {
+                try {
+                  const result = await runSim('account-takeover');
+                  setSelectedTransaction(result.transaction);
+                  addToast({ type: 'warning', title: 'Simulation Complete', message: `${result.transaction.threat_type} — Score: ${result.analysis.risk_score}/100` });
+                  setAttackReplayOpen(true);
+                } catch { retryLastSim(); }
               }}
             />
             <SimButton
               label="Simulate Velocity Attack"
               icon={Zap}
               color="high"
-              onClick={() => {
-                const result = runSim('velocity');
-                setSelectedTransaction(result.transaction);
-                addToast({ type: 'warning', title: 'Simulation Complete', message: `${result.transaction.threat_type} — Score: ${result.analysis.risk_score}/100` });
-                setAttackReplayOpen(true);
+              loading={simLoading}
+              onClick={async () => {
+                try {
+                  const result = await runSim('velocity');
+                  setSelectedTransaction(result.transaction);
+                  addToast({ type: 'warning', title: 'Simulation Complete', message: `${result.transaction.threat_type} — Score: ${result.analysis.risk_score}/100` });
+                  setAttackReplayOpen(true);
+                } catch { retryLastSim(); }
               }}
             />
             <SimButton
               label="Simulate Suspicious Device"
               icon={PlayCircle}
               color="amber"
-              onClick={() => {
-                const result = runSim('suspicious-device');
-                setSelectedTransaction(result.transaction);
-                addToast({ type: 'warning', title: 'Simulation Complete', message: `${result.transaction.threat_type} — Score: ${result.analysis.risk_score}/100` });
-                setAttackReplayOpen(true);
+              loading={simLoading}
+              onClick={async () => {
+                try {
+                  const result = await runSim('suspicious-device');
+                  setSelectedTransaction(result.transaction);
+                  addToast({ type: 'warning', title: 'Simulation Complete', message: `${result.transaction.threat_type} — Score: ${result.analysis.risk_score}/100` });
+                  setAttackReplayOpen(true);
+                } catch { retryLastSim(); }
               }}
             />
             <SimButton
               label="Simulate Normal Transaction"
               icon={ShieldCheck}
               color="green"
-              onClick={() => {
-                const result = runSim('normal');
-                setSelectedTransaction(result.transaction);
-                addToast({ type: 'success', title: 'Simulation Complete', message: `${result.transaction.threat_type} — Score: ${result.analysis.risk_score}/100` });
+              loading={simLoading}
+              onClick={async () => {
+                try {
+                  const result = await runSim('normal');
+                  setSelectedTransaction(result.transaction);
+                  addToast({ type: 'success', title: 'Simulation Complete', message: `${result.transaction.threat_type} — Score: ${result.analysis.risk_score}/100` });
+                } catch { retryLastSim(); }
               }}
             />
           </div>
+          {simError && (
+            <div className="mt-3 p-3 rounded-lg bg-risk-critical/5 border border-risk-critical/20">
+              <div className="text-xs text-risk-critical mb-2">{simError}</div>
+              <button
+                onClick={retryLastSim}
+                className="text-xs px-3 py-1.5 rounded-lg bg-risk-critical/10 border border-risk-critical/30 text-risk-critical hover:bg-risk-critical/20 transition-colors"
+              >
+                Retry
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Recent high-risk transactions */}
@@ -354,9 +377,10 @@ interface SimButtonProps {
   icon: typeof Bot;
   color: 'critical' | 'high' | 'amber' | 'green';
   onClick: () => void;
+  loading?: boolean;
 }
 
-function SimButton({ label, icon: Icon, color, onClick }: SimButtonProps) {
+function SimButton({ label, icon: Icon, color, onClick, loading }: SimButtonProps) {
   const colors = {
     critical: 'bg-risk-critical/5 border-risk-critical/20 text-risk-critical hover:bg-risk-critical/10',
     high: 'bg-risk-high/5 border-risk-high/20 text-risk-high hover:bg-risk-high/10',
@@ -367,13 +391,15 @@ function SimButton({ label, icon: Icon, color, onClick }: SimButtonProps) {
   return (
     <button
       onClick={onClick}
+      disabled={loading}
       className={cn(
         'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border text-sm font-medium transition-all duration-200 group',
-        colors[color]
+        colors[color],
+        loading && 'opacity-50 cursor-wait',
       )}
     >
-      <Icon className="w-4 h-4 group-hover:scale-110 transition-transform" />
-      {label}
+      <Icon className={cn('w-4 h-4', loading ? 'animate-spin' : 'group-hover:scale-110 transition-transform')} />
+      {loading ? 'Running simulation...' : label}
     </button>
   );
 }

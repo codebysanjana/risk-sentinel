@@ -1,6 +1,7 @@
 import { useApp } from '@/store/AppContext';
 import { cn } from '@/lib/cn';
-import { Settings, Gauge, Bell, Beaker, Sparkles } from 'lucide-react';
+import { Settings, Gauge, Bell, Beaker, Sparkles, Server, Wifi } from 'lucide-react';
+import { isApiConfigured } from '@/services/api';
 
 export function SettingsPage() {
   const { settings, updateSettings, addToast } = useApp();
@@ -85,6 +86,60 @@ export function SettingsPage() {
           value={settings.demoMode}
           onChange={(v) => handleToggle('demoMode', v)}
         />
+      </div>
+
+      {/* Data Source: API vs Demo */}
+      <div className="glass-card p-5 animate-fade-in-up animate-delay-350">
+        <div className="flex items-center gap-2 mb-1">
+          <Server className="w-4 h-4 text-cyan-400" />
+          <h2 className="text-sm font-semibold text-white">Data Source</h2>
+        </div>
+        <p className="text-xs text-navy-300 mb-4">
+          Choose between the FastAPI backend (API MODE) or built-in synthetic data (DEMO MODE)
+        </p>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            onClick={() => {
+              updateSettings({ apiMode: false });
+              addToast({ type: 'info', title: 'Data Source', message: 'Switched to DEMO MODE — using synthetic frontend data' });
+            }}
+            className={cn(
+              'px-4 py-3 rounded-lg border text-sm font-medium transition-all duration-200 flex items-center gap-2',
+              !settings.apiMode
+                ? 'bg-cyan-400/10 border-cyan-400/30 text-cyan-300'
+                : 'bg-navy-800/40 border-navy-600/20 text-navy-300 hover:text-slate-200'
+            )}
+          >
+            <Beaker className="w-4 h-4" />
+            DEMO MODE
+          </button>
+          <button
+            onClick={() => {
+              if (!isApiConfigured()) {
+                addToast({ type: 'error', title: 'API Not Configured', message: 'Set VITE_API_URL in your .env file to use API MODE' });
+                return;
+              }
+              updateSettings({ apiMode: true });
+              addToast({ type: 'success', title: 'Data Source', message: 'Switched to API MODE — using FastAPI backend' });
+            }}
+            className={cn(
+              'px-4 py-3 rounded-lg border text-sm font-medium transition-all duration-200 flex items-center gap-2',
+              settings.apiMode
+                ? 'bg-cyan-400/10 border-cyan-400/30 text-cyan-300'
+                : 'bg-navy-800/40 border-navy-600/20 text-navy-300 hover:text-slate-200'
+            )}
+          >
+            <Wifi className="w-4 h-4" />
+            API MODE
+          </button>
+        </div>
+        <p className="text-xs text-navy-300 mt-3">
+          {settings.apiMode
+            ? 'Connected to FastAPI backend. All data comes from the server.'
+            : isApiConfigured()
+              ? 'Using built-in synthetic data. Switch to API MODE to use the FastAPI backend.'
+              : 'Using built-in synthetic data. Set VITE_API_URL to enable API MODE.'}
+        </p>
       </div>
 
       {/* Animations */}

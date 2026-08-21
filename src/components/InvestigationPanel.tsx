@@ -2,7 +2,8 @@ import { useState, useEffect, useMemo } from 'react';
 import { useApp } from '@/store/AppContext';
 import { cn } from '@/lib/cn';
 import { analyzeRisk } from '@/lib/riskEngine';
-import type { RiskAnalysis, RecommendedAction } from '@/types';
+import { createInvestigation as apiCreateInvestigation, isApiConfigured, ApiError } from '@/services/api';
+import type { RiskAnalysis, RecommendedAction, Investigation } from '@/types';
 import { formatCurrency, formatTime, riskBgColor, actionBgColor } from '@/lib/utils';
 import {
   X,
@@ -27,10 +28,13 @@ export function InvestigationPanel() {
     addInvestigation,
     addToast,
     investigations,
+    settings,
   } = useApp();
 
   const [humanDecision, setHumanDecision] = useState<RecommendedAction | 'PENDING'>('PENDING');
   const [notes, setNotes] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const analysis: RiskAnalysis | null = useMemo(() => {
     if (!selectedTransaction) return null;
@@ -53,27 +57,64 @@ export function InvestigationPanel() {
 
   if (!investigationPanelOpen || !selectedTransaction || !analysis) return null;
 
-  const handleCreateInvestigation = () => {
-    const inv = {
-      id: `INV-${Date.now()}`,
+  const handleCreateInvestigation = async () => {
+    setSaving(true);
+    setSaveError(null);
+
+    const invData = {
       transaction_id: selectedTransaction.id,
-      created_at: new Date().toISOString(),
-      analyst: 'Risk Analyst',
       risk_score: analysis.risk_score,
       risk_level: analysis.risk_level,
       threat_type: analysis.threat_type,
       recommended_action: analysis.recommended_action,
-      human_decision: humanDecision,
-      status: (humanDecision === 'PENDING' ? 'open' : 'resolved') as 'open' | 'reviewing' | 'resolved',
+      risk_factors: analysis.risk_factors,
+      timeline: analysis.timeline,
+      attack_story: analysis.attack_story,
       notes,
-      ai_summary: analysis.attack_story,
+      human_decision: humanDecision,
+      analyst: 'Risk Analyst',
     };
-    addInvestigation(inv);
-    addToast({
-      type: 'success',
-      title: 'Investigation Saved',
-      message: `Investigation ${inv.id} created for ${selectedTransaction.id}`,
-    });
+
+    try {
+      if (settings.apiMode && isApiConfigured()) {
+        const created = await apiCreateInvestigation(invData);
+        addInvestigation(created);
+        addToast({
+          type: 'success',
+          title: 'Investigation Saved',
+          message: `Investigation ${created.id} created for ${selectedTransaction.id}`,
+        });
+      } else {
+        const inv: Investigation = {
+          id: `INV-${Date.now()}`,
+          transaction_id: selectedTransaction.id,
+          created_at: new Date().toISOString(),
+          analyst: 'Risk Analyst',
+          risk_score: analysis.risk_score,
+          risk_level: analysis.risk_level,
+          threat_type: analysis.threat_type,
+          recommended_action: analysis.recommended_action,
+          human_decision: humanDecision,
+          status: (humanDecision === 'PENDING' ? 'open' : 'resolved') as 'open' | 'reviewing' | 'resolved',
+          notes,
+          ai_summary: analysis.attack_story,
+        };
+        addInvestigation(inv);
+        addToast({
+          type: 'success',
+          title: 'Investigation Saved',
+          message: `Investigation ${inv.id} created for ${selectedTransaction.id}`,
+        });
+      }
+    } catch (err) {
+      const msg = err instanceof ApiError
+        ? (err.isNetworkError ? 'Cannot connect to backend. Check if it is running.' : err.message)
+        : 'Failed to save investigation.';
+      setSaveError(msg);
+      addToast({ type: 'error', title: 'Save Failed', message: msg });
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleGenerateReport = () => {
@@ -303,10 +344,11 @@ export function InvestigationPanel() {
             <div className="flex items-center gap-2 mt-3">
               <button
                 onClick={handleCreateInvestigation}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-cyan-400/10 border border-cyan-400/30 text-cyan-300 hover:bg-cyan-400/20 text-sm font-medium transition-all duration-200"
+                disabled={saving}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-cyan-400/10 border border-cyan-400/30 text-cyan-300 hover:bg-cyan-400/20 text-sm font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-wait"
               >
-                <CheckCircle className="w-4 h-4" />
-                Save Investigation
+                <CheckCircle className={cn('w-4 h-4', saving && 'animate-spin')} />
+                {saving ? 'Saving...' : 'Save Investigation'}
               </button>
               <button
                 onClick={() => { setAttackReplayOpen(true); }}
@@ -323,6 +365,17 @@ export function InvestigationPanel() {
                 Generate Report
               </button>
             </div>
+            {saveError && (
+              <div className="mt-3 p-3 rounded-lg bg-risk-critical/5 border border-risk-critical/20">
+                <div className="text-xs text-risk-critical mb-2">{saveError}</div>
+                <button
+                  onClick={handleCreateInvestigation}
+                  className="text-xs px-3 py-1.5 rounded-lg bg-risk-critical/10 border border-risk-critical/30 text-risk-critical hover:bg-risk-critical/20 transition-colors"
+                >
+                  Retry
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
